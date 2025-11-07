@@ -1,0 +1,9 @@
+flask==3.0.0
+flask-cors==4.0.0
+transformers==4.36.0
+torch>=2.5.1
+sounddevice==0.4.6
+soundfile==0.12.1
+numpy>=1.26.0
+tensorflow>=2.15.0
+
