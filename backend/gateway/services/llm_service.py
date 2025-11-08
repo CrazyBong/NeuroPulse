@@ -109,6 +109,8 @@ def generate_mental_health_tips(stress_score, primary_emotion, emotion_breakdown
         dict: Structured mental health tips with summary, tips list, and resources
     """
     
+    print(f"🔍 LLM Service - Generating mental health tips for {primary_emotion} with stress {stress_score:.2f}")
+    
     prompt = f"""
     You are a mental health wellbeing expert. Based on the following emotional analysis:
     
@@ -143,6 +145,7 @@ def generate_mental_health_tips(stress_score, primary_emotion, emotion_breakdown
     """
 
     try:
+        print("🚀 Calling OpenAI API for mental health tips...")
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -153,8 +156,9 @@ def generate_mental_health_tips(stress_score, primary_emotion, emotion_breakdown
             max_tokens=500
         )
         
+        print("✅ OpenAI API call successful for mental health tips")
         content = response.choices[0].message.content
-        return content.strip() if content else {
+        result = content.strip() if content else {
             "summary": "We've analyzed your emotional state and provided personalized suggestions to support your wellbeing.",
             "tips": [
                 "Practice deep breathing exercises for 5 minutes daily",
@@ -168,7 +172,35 @@ def generate_mental_health_tips(stress_score, primary_emotion, emotion_breakdown
                 {"title": "National Suicide Prevention Lifeline", "description": "Call 988 for 24/7 support"}
             ]
         }
+        
+        # If we got a string response, try to parse it as JSON
+        if isinstance(result, str):
+            import json
+            try:
+                result = json.loads(result)
+            except json.JSONDecodeError:
+                print("⚠️  Failed to parse LLM response as JSON, using fallback")
+                result = {
+                    "summary": "We've analyzed your emotional state and provided personalized suggestions to support your wellbeing.",
+                    "tips": [
+                        "Practice deep breathing exercises for 5 minutes daily",
+                        "Engage in physical activity or stretching",
+                        "Connect with friends or family members",
+                        "Maintain a regular sleep schedule",
+                        "Try mindfulness or meditation techniques"
+                    ],
+                    "resources": [
+                        {"title": "Crisis Text Line", "description": "Text HOME to 741741 for free, 24/7 crisis support"},
+                        {"title": "National Suicide Prevention Lifeline", "description": "Call 988 for 24/7 support"}
+                    ]
+                }
+        
+        print(f"✅ Mental health tips generated ({len(result.get('tips', []))} tips)")
+        return result
     except Exception as e:
+        print("🔥 LLM_SERVICE ERROR in mental health tips:", str(e))
+        print("📋 Full traceback:")
+        traceback.print_exc()
         # Return default structured response if LLM fails
         return {
             "summary": "We've analyzed your emotional state and provided personalized suggestions to support your wellbeing.",

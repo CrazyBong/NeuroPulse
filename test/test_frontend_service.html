@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Frontend Service</title>
+</head>
+<body>
+    <h1>Testing Mental Health Tips Generation</h1>
+    <button id="testButton">Generate Tips</button>
+    <div id="result"></div>
+
+    <script type="module">
+        // Import the function (this would normally be done through the build system)
+        // For this test, we'll simulate the call
+        
+        document.getElementById('testButton').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>Generating tips...</p>';
+            
+            try {
+                // Simulate the fetch call that would happen in the service
+                const testData = {
+                    stressScore: 1.0,
+                    primaryEmotion: 'sadness',
+                    emotionBreakdown: [
+                        { label: 'sadness', score: 0.71 },
+                        { label: 'fear', score: 0.22 },
+                        { label: 'anger', score: 0.05 },
+                        { label: 'disgust', score: 0.03 },
+                        { label: 'neutral', score: 0.01 }
+                    ],
+                    hasTextAnalysis: true,
+                    hasFaceAnalysis: false,
+                    textStress: 1.0,
+                    faceStress: 0
+                };
+                
+                // This is what the generateMentalHealthTips function does
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+                
+                const response = await fetch('http://127.0.0.1:8000/api/generate-tips', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testData),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                resultDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.innerHTML = `<p>Error: ${error.message}</p><p>Using fallback response...</p>`;
+                
+                // Show fallback response
+                const fallbackResponse = {
+                    summary: "We've analyzed your emotional state and provided personalized suggestions to support your wellbeing.",
+                    tips: [
+                        "Practice deep breathing exercises for 5 minutes daily",
+                        "Engage in physical activity or stretching",
+                        "Connect with friends or family members",
+                        "Maintain a regular sleep schedule",
+                        "Try mindfulness or meditation techniques"
+                    ],
+                    resources: [
+                        {"title": "Crisis Text Line", "description": "Text HOME to 741741 for free, 24/7 crisis support"},
+                        {"title": "National Suicide Prevention Lifeline", "description": "Call 988 for 24/7 support"}
+                    ]
+                };
+                
+                resultDiv.innerHTML += `<pre>${JSON.stringify(fallbackResponse, null, 2)}</pre>`;
+            }
+        });
+    </script>
+</body>
+</html>

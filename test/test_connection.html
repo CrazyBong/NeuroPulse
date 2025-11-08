@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Connection</title>
+</head>
+<body>
+    <h1>Testing Connection to Backend</h1>
+    <button id="testButton">Test Connection</button>
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('testButton').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>Testing connection...</p>';
+            
+            try {
+                // Test health endpoint first
+                const healthResponse = await fetch('http://127.0.0.1:8000/api/health');
+                const healthData = await healthResponse.json();
+                resultDiv.innerHTML += `<p>Health Check: ${healthResponse.status} - ${JSON.stringify(healthData)}</p>`;
+                
+                // Test generate-tips endpoint
+                const testData = {
+                    "stressScore": 0.8,
+                    "primaryEmotion": "sadness",
+                    "emotionBreakdown": [
+                        {"label": "sadness", "score": 0.8},
+                        {"label": "neutral", "score": 0.2}
+                    ],
+                    "hasTextAnalysis": true,
+                    "hasFaceAnalysis": false,
+                    "textStress": 0.8,
+                    "faceStress": 0
+                };
+                
+                const tipsResponse = await fetch('http://127.0.0.1:8000/api/generate-tips', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testData)
+                });
+                
+                const tipsData = await tipsResponse.json();
+                resultDiv.innerHTML += `<p>Generate Tips: ${tipsResponse.status}</p>`;
+                resultDiv.innerHTML += `<pre>${JSON.stringify(tipsData, null, 2)}</pre>`;
+                
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.innerHTML += `<p>Error: ${error.message}</p>`;
+            }
+        });
+    </script>
+</body>
+</html>

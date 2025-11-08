@@ -113,7 +113,7 @@ export function Dashboard({ result }: DashboardProps) {
     return Math.min(1, Math.max(0, sum));
   }, [safeData.sources.audio?.predictions]);
 
-  const [mentalHealthTips, setMentalHealthTips] = useState<MentalHealthTipsResponse | null>(null);
+  const [mentalHealthTips, setMentalHealthTips] = useState(null as MentalHealthTipsResponse | null);
   const [loadingTips, setLoadingTips] = useState(true);
 
   const stressLevel = useMemo(() => {
@@ -130,10 +130,21 @@ export function Dashboard({ result }: DashboardProps) {
     const fetchTips = async () => {
       setLoadingTips(true);
       try {
+        // Debug log the data being sent
+        console.log('🔍 Generating mental health tips with data:', {
+          stressScore: stressScore,
+          primaryEmotion: safeData.combined_emotion,
+          emotionBreakdown: formattedPredictions, // Use formatted predictions
+          hasTextAnalysis: safeData.weights.text > 0,
+          hasFaceAnalysis: safeData.weights.face > 0,
+          textStress: getTextStress,
+          faceStress: getFaceStress,
+        });
+        
         const tipsResponse = await generateMentalHealthTips({
           stressScore: stressScore,
           primaryEmotion: safeData.combined_emotion,
-          emotionBreakdown: safeData.predictions,
+          emotionBreakdown: formattedPredictions, // Use formatted predictions
           hasTextAnalysis: safeData.weights.text > 0,
           hasFaceAnalysis: safeData.weights.face > 0,
           textStress: getTextStress,
@@ -148,7 +159,7 @@ export function Dashboard({ result }: DashboardProps) {
     };
 
     fetchTips();
-  }, [safeData, stressScore]);
+  }, [stressScore, safeData.combined_emotion, formattedPredictions, safeData.weights.text, safeData.weights.face, getTextStress, getFaceStress]);
 
   return (
     <motion.div

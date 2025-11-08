@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'services'))
-from services.llm_service import generate_emotion_summary
+from services.llm_service import generate_emotion_summary, generate_mental_health_tips
 
 # ---------------------------------------------------
 # ✅ FastAPI App Initialization
@@ -22,7 +22,7 @@ app = FastAPI(
 # ---------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*", "http://localhost:3002"],  # Allow frontend running on port 3002
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -248,6 +248,57 @@ async def analyze_fusion(
             "sources": {},
             "weights": {"text": 0, "face": 0, "audio": 0},
             "error": str(e)
+        }
+
+# ---------------------------------------------------
+# ✅ Mental Health Tips Generation
+# ---------------------------------------------------
+@app.post("/api/generate-tips")
+async def generate_mental_health_tips_endpoint(request: Request):
+    try:
+        # Parse JSON body
+        body = await request.json()
+        
+        # Extract parameters
+        stress_score = body.get("stressScore", 0)
+        primary_emotion = body.get("primaryEmotion", "neutral")
+        emotion_breakdown = body.get("emotionBreakdown", [])
+        has_text_analysis = body.get("hasTextAnalysis", False)
+        has_face_analysis = body.get("hasFaceAnalysis", False)
+        text_stress = body.get("textStress", 0)
+        face_stress = body.get("faceStress", 0)
+        
+        print(f"🤖 Generating mental health tips for {primary_emotion} with stress {stress_score:.2f}")
+        
+        # Call LLM service
+        tips_response = generate_mental_health_tips(
+            stress_score=stress_score,
+            primary_emotion=primary_emotion,
+            emotion_breakdown=emotion_breakdown,
+            has_text_analysis=has_text_analysis,
+            has_face_analysis=has_face_analysis,
+            text_stress=text_stress,
+            face_stress=face_stress
+        )
+        
+        print(f"✅ Mental health tips generated")
+        return tips_response
+    except Exception as e:
+        print(f"🔥 Error generating mental health tips: {str(e)}")
+        # Return fallback response
+        return {
+            "summary": "We've analyzed your emotional state and provided personalized suggestions to support your wellbeing.",
+            "tips": [
+                "Practice deep breathing exercises for 5 minutes daily",
+                "Engage in physical activity or stretching",
+                "Connect with friends or family members",
+                "Maintain a regular sleep schedule",
+                "Try mindfulness or meditation techniques"
+            ],
+            "resources": [
+                {"title": "Crisis Text Line", "description": "Text HOME to 741741 for free, 24/7 crisis support"},
+                {"title": "National Suicide Prevention Lifeline", "description": "Call 988 for 24/7 support"}
+            ]
         }
 
 # ---------------------------------------------------
