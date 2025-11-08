@@ -9,7 +9,8 @@ import { WebcamAnalyzer } from './components/WebcamAnalyzer';
 import { LiveEmotionAnalysis } from './components/LiveEmotionAnalysis';
 import { Dashboard } from './components/Dashboard';
 import { FeedbackWidget } from './components/FeedbackWidget';
-import { analyzeFusion } from './services/api';
+import { analyzeFusion, fusePreAnalyzedResults } from './services/api';
+import { fusionAPI } from './services/fusionAPI';
 import type { TextEmotionResponse, FaceEmotionResponse, FusionResponse } from './services/api';
 
 type AppState = 'welcome' | 'analyzing' | 'live-analysis' | 'results';
@@ -103,7 +104,7 @@ export default function App() {
     if (!cameraEnabled) {
       // Text-only mode
       setIsProcessing(true);
-      const fusion = await analyzeFusion('sample text for fusion');
+      const fusion = await fusionAPI.analyzeFusion(result, null, null);
       setFusionResult(fusion);
       setIsProcessing(false);
       setAppState('results');
@@ -124,16 +125,16 @@ export default function App() {
     setFaceResult(finalResult);
     
     if (textResult) {
-      // Run fusion analysis
+      // Run fusion analysis with both text and face results
       setIsProcessing(true);
-      const fusion = await analyzeFusion('sample text', new Blob());
+      const fusion = await fusionAPI.analyzeFusion(textResult, finalResult, null);
       setFusionResult(fusion);
       setIsProcessing(false);
       setAppState('results');
     } else {
       // Face-only mode (no text analysis)
       setIsProcessing(true);
-      const fusion = await analyzeFusion('', new Blob());
+      const fusion = await fusionAPI.analyzeFusion(null, finalResult, null);
       setFusionResult(fusion);
       setIsProcessing(false);
       setAppState('results');
@@ -448,7 +449,7 @@ export default function App() {
                 exit={{ opacity: 0, y: -20 }}
                 className="max-w-6xl mx-auto"
               >
-                <Dashboard data={fusionResult} />
+                <Dashboard result={fusionResult} />
 
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}

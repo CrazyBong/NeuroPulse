@@ -1,196 +1,249 @@
-// Mock API service layer for NeuroPulse
-// In production, these would call the FastAPI backend endpoints
+// NeuroPulse API Service Layer
+// Connects to Flask backend services for emotion analysis
 
+import { textEmotionAPI } from './textEmotionAPI';
+import { faceEmotionAPI } from './faceEmotionAPI';
+import { audioEmotionAPI } from './audioEmotionAPI';
+
+// Unified response interfaces
 export interface TextEmotionResponse {
-  emotions: {
+  success: boolean;
+  predictions: {
     label: string;
     score: number;
   }[];
-  stress_score: number;
-  shap_explanation: {
-    token: string;
-    importance: number;
-  }[];
+  top_emotion: string;
+  confidence: number;
+  text_length?: number;
+  error?: string;
 }
 
 export interface FaceEmotionResponse {
-  emotion: string;
-  confidence: number;
-  stress_mapping?: number;
-  detailed_emotions?: Record<string, number>;
-  all_emotions?: {
+  success: boolean;
+  predictions: {
     label: string;
     score: number;
   }[];
+  top_emotion: string;
+  confidence: number;
+  image_size?: [number, number];
+  error?: string;
+}
+
+export interface AudioEmotionResponse {
+  success: boolean;
+  predictions: {
+    label: string;
+    score: number;
+  }[];
+  top_emotion: string;
+  confidence: number;
+  duration?: number;
+  error?: string;
 }
 
 export interface FusionResponse {
-  combined_stress_score: number;
-  primary_emotion: string;
+  success: boolean;
+  combined_emotion: string;
   confidence: number;
-  breakdown: {
-    text_stress: number;
-    face_stress: number;
-    text_weight: number;
-    face_weight: number;
-  };
-  emotions: {
+  predictions: {
     label: string;
     score: number;
   }[];
-  shap_explanation: {
-    token: string;
-    importance: number;
-  }[];
+  sources: {
+    text?: TextEmotionResponse;
+    face?: FaceEmotionResponse;
+    audio?: AudioEmotionResponse;
+  };
+  weights: {
+    text: number;
+    face: number;
+    audio: number;
+  };
+  stress?: number;
+  llm_summary?: string;
+  error?: string;
 }
 
-// Mock text emotion inference
+// Text emotion analysis
 export async function analyzeText(text: string): Promise<TextEmotionResponse> {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400));
-  
-  // Mock emotion detection based on keywords
-  const emotions = [
-    { label: 'joy', score: 0 },
-    { label: 'sadness', score: 0 },
-    { label: 'anger', score: 0 },
-    { label: 'fear', score: 0 },
-    { label: 'surprise', score: 0 },
-    { label: 'neutral', score: 0 },
-  ];
-  
-  const lowerText = text.toLowerCase();
-  
-  // Simple keyword matching for demo
-  if (lowerText.match(/happy|joy|great|wonderful|amazing|love|excited/)) {
-    emotions[0].score = 0.7 + Math.random() * 0.25;
-  } else if (lowerText.match(/sad|depressed|down|unhappy|disappointed/)) {
-    emotions[1].score = 0.6 + Math.random() * 0.3;
-  } else if (lowerText.match(/angry|mad|furious|hate|annoyed/)) {
-    emotions[2].score = 0.65 + Math.random() * 0.3;
-  } else if (lowerText.match(/scared|afraid|anxious|worried|nervous/)) {
-    emotions[3].score = 0.6 + Math.random() * 0.35;
-  } else if (lowerText.match(/wow|surprised|shocked|unexpected/)) {
-    emotions[4].score = 0.55 + Math.random() * 0.3;
-  } else {
-    emotions[5].score = 0.5 + Math.random() * 0.3;
+  try {
+    // Use real backend service
+    return await textEmotionAPI.analyzeText(text);
+  } catch (error) {
+    console.error('Text analysis failed:', error);
+    return {
+      success: false,
+      predictions: [],
+      top_emotion: 'neutral',
+      confidence: 0,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
   }
-  
-  // Fill remaining with smaller values
-  emotions.forEach(e => {
-    if (e.score === 0) {
-      e.score = Math.random() * 0.2;
-    }
-  });
-  
-  // Normalize
-  const total = emotions.reduce((sum, e) => sum + e.score, 0);
-  emotions.forEach(e => e.score = e.score / total);
-  
-  // Calculate stress score (anger + fear + sadness weighted)
-  const stress_score = (emotions[2].score * 0.8 + emotions[3].score * 0.9 + emotions[1].score * 0.6);
-  
-  // Generate SHAP explanations
-  const words = text.split(/\s+/).filter(w => w.length > 0);
-  const shap_explanation = words.map(token => ({
-    token,
-    importance: (Math.random() - 0.5) * 2 // Range -1 to 1
-  })).sort((a, b) => Math.abs(b.importance) - Math.abs(a.importance)).slice(0, Math.min(10, words.length));
-  
-  return {
-    emotions: emotions.sort((a, b) => b.score - a.score),
-    stress_score,
-    shap_explanation
-  };
 }
 
-// Mock face emotion inference
+// Face emotion analysis
 export async function analyzeFace(imageBlob: Blob): Promise<FaceEmotionResponse> {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 400));
-  
-  const emotionsList = ['joy', 'sadness', 'anger', 'fear', 'surprise', 'neutral'];
-  const primaryIdx = Math.floor(Math.random() * emotionsList.length);
-  const primary = emotionsList[primaryIdx];
-  
-  const all_emotions = emotionsList.map((label, idx) => ({
-    label,
-    score: idx === primaryIdx ? 0.5 + Math.random() * 0.4 : Math.random() * 0.3
-  }));
-  
-  // Normalize
-  const total = all_emotions.reduce((sum, e) => sum + e.score, 0);
-  all_emotions.forEach(e => e.score = e.score / total);
-  
-  const primaryEmotion = all_emotions.find(e => e.label === primary)!;
-  
-  // Map to stress
-  const stressMap: Record<string, number> = {
-    joy: 0.1,
-    sadness: 0.6,
-    anger: 0.8,
-    fear: 0.85,
-    surprise: 0.3,
-    neutral: 0.2
-  };
-  
-  const detailed_emotions: Record<string, number> = {};
-  all_emotions.forEach(e => {
-    detailed_emotions[e.label] = e.score;
-  });
-
-  return {
-    emotion: primary,
-    confidence: primaryEmotion.score,
-    stress_mapping: stressMap[primary] + (Math.random() - 0.5) * 0.1,
-    detailed_emotions,
-    all_emotions: all_emotions.sort((a, b) => b.score - a.score)
-  };
+  try {
+    // Use real backend service
+    return await faceEmotionAPI.analyzeFace(imageBlob);
+  } catch (error) {
+    console.error('Face analysis failed:', error);
+    return {
+      success: false,
+      predictions: [],
+      top_emotion: 'neutral',
+      confidence: 0,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
 }
 
-// Optimized: Parallel processing for text and face analysis
-export async function analyzeFusion(text: string, faceImage?: Blob): Promise<FusionResponse> {
-  // Run text and face analysis in parallel for better performance
-  const [textResult, faceResult] = await Promise.all([
-    analyzeText(text),
-    faceImage ? analyzeFace(faceImage) : Promise.resolve(null)
-  ]);
+// Audio emotion analysis
+export async function analyzeAudio(audioBlob: Blob): Promise<AudioEmotionResponse> {
+  try {
+    // Use real backend service
+    return await audioEmotionAPI.uploadAndPredict(audioBlob);
+  } catch (error) {
+    console.error('Audio analysis failed:', error);
+    return {
+      success: false,
+      predictions: [],
+      top_emotion: 'neutral',
+      confidence: 0,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+}
+
+// Fusion analysis combining multiple emotion sources
+export async function analyzeFusion(
+  text?: string, 
+  faceImage?: Blob, 
+  audioBlob?: Blob
+): Promise<FusionResponse> {
+  try {
+    // Run all analyses in parallel
+    const textPromise = text ? analyzeText(text) : Promise.resolve(null);
+    const facePromise = faceImage ? analyzeFace(faceImage) : Promise.resolve(null);
+    const audioPromise = audioBlob ? analyzeAudio(audioBlob) : Promise.resolve(null);
+
+    const [textResult, faceResult, audioResult] = await Promise.all([
+      textPromise,
+      facePromise,
+      audioPromise
+    ]);
+
+    return fuseResults(textResult, faceResult, audioResult);
+  } catch (error) {
+    console.error('Fusion analysis failed:', error);
+    return {
+      success: false,
+      combined_emotion: 'neutral',
+      confidence: 0,
+      predictions: [],
+      sources: {},
+      weights: { text: 0, face: 0, audio: 0 },
+      error: error instanceof Error ? error.message : 'Fusion analysis failed'
+    };
+  }
+}
+
+// New function to fuse pre-analyzed results
+export async function fusePreAnalyzedResults(
+  textResult: TextEmotionResponse | null,
+  faceResult: FaceEmotionResponse | null,
+  audioResult: AudioEmotionResponse | null
+): Promise<FusionResponse> {
+  try {
+    return fuseResults(textResult, faceResult, audioResult);
+  } catch (error) {
+    console.error('Fusion analysis failed:', error);
+    return {
+      success: false,
+      combined_emotion: 'neutral',
+      confidence: 0,
+      predictions: [],
+      sources: {},
+      weights: { text: 0, face: 0, audio: 0 },
+      error: error instanceof Error ? error.message : 'Fusion analysis failed'
+    };
+  }
+}
+
+// Helper function to perform the actual fusion logic
+function fuseResults(
+  textResult: TextEmotionResponse | null,
+  faceResult: FaceEmotionResponse | null,
+  audioResult: AudioEmotionResponse | null
+): FusionResponse {
+  // Calculate weights (adjust as needed)
+  const textWeight = textResult?.success ? 0.4 : 0;
+  const faceWeight = faceResult?.success ? 0.4 : 0;
+  const audioWeight = audioResult?.success ? 0.2 : 0;
   
-  const text_weight = faceImage ? 0.6 : 1.0;
-  const face_weight = faceImage ? 0.4 : 0.0;
+  const totalWeight = textWeight + faceWeight + audioWeight;
   
-  const combined_stress_score = faceResult
-    ? textResult.stress_score * text_weight + faceResult.stress_mapping * face_weight
-    : textResult.stress_score;
-  
-  // Merge emotions
+  // Handle case where no sources are available
+  if (totalWeight === 0) {
+    return {
+      success: true,
+      combined_emotion: 'neutral',
+      confidence: 0.5,
+      predictions: [{ label: 'neutral', score: 1.0 }],
+      sources: {},
+      weights: { text: 0, face: 0, audio: 0 }
+    };
+  }
+
+  // Normalize weights
+  const normalizedTextWeight = textWeight / totalWeight;
+  const normalizedFaceWeight = faceWeight / totalWeight;
+  const normalizedAudioWeight = audioWeight / totalWeight;
+
+  // Combine predictions
   const emotionMap = new Map<string, number>();
-  
-  textResult.emotions.forEach(e => {
-    emotionMap.set(e.label, (emotionMap.get(e.label) || 0) + e.score * text_weight);
-  });
-  
-  if (faceResult && faceResult.all_emotions) {
-    faceResult.all_emotions.forEach(e => {
-      emotionMap.set(e.label, (emotionMap.get(e.label) || 0) + e.score * face_weight);
+
+  if (textResult?.success) {
+    textResult.predictions.forEach(pred => {
+      const currentScore = emotionMap.get(pred.label) || 0;
+      emotionMap.set(pred.label, currentScore + pred.score * normalizedTextWeight);
     });
   }
-  
-  const emotions = Array.from(emotionMap.entries())
+
+  if (faceResult?.success) {
+    faceResult.predictions.forEach(pred => {
+      const currentScore = emotionMap.get(pred.label) || 0;
+      emotionMap.set(pred.label, currentScore + pred.score * normalizedFaceWeight);
+    });
+  }
+
+  if (audioResult?.success) {
+    audioResult.predictions.forEach(pred => {
+      const currentScore = emotionMap.get(pred.label) || 0;
+      emotionMap.set(pred.label, currentScore + pred.score * normalizedAudioWeight);
+    });
+  }
+
+  // Convert to array and sort
+  const predictions = Array.from(emotionMap.entries())
     .map(([label, score]) => ({ label, score }))
     .sort((a, b) => b.score - a.score);
-  
+
   return {
-    combined_stress_score,
-    primary_emotion: emotions[0].label,
-    confidence: emotions[0].score,
-    breakdown: {
-      text_stress: textResult.stress_score,
-      face_stress: faceResult?.stress_mapping || 0,
-      text_weight,
-      face_weight
+    success: true,
+    combined_emotion: predictions[0]?.label || 'neutral',
+    confidence: predictions[0]?.score || 0.5,
+    predictions,
+    sources: {
+      text: textResult || undefined,
+      face: faceResult || undefined,
+      audio: audioResult || undefined
     },
-    emotions,
-    shap_explanation: textResult.shap_explanation
+    weights: {
+      text: normalizedTextWeight,
+      face: normalizedFaceWeight,
+      audio: normalizedAudioWeight
+    }
   };
 }

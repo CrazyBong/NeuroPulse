@@ -4,7 +4,7 @@
  * Backend: http://127.0.0.1:5002
  */
 
-const BACKEND_URL = 'http://127.0.0.1:5002/api';
+const BACKEND_URL = 'http://127.0.0.1:8000';
 
 // Types
 export interface EmotionPrediction {
@@ -58,7 +58,7 @@ class FaceEmotionAPI {
    */
   async checkHealth(): Promise<BackendHealthResponse> {
     try {
-      const response = await fetch(`${this.baseURL}/health`, {
+      const response = await fetch(`${this.baseURL}/api/health`, {
         method: 'GET',
       });
 
@@ -84,7 +84,7 @@ class FaceEmotionAPI {
    */
   async getEmotions(): Promise<string[]> {
     try {
-      const response = await fetch(`${this.baseURL}/emotions`);
+      const response = await fetch(`${this.baseURL}/api/emotions`);
       const data = await response.json();
       return data.emotions || [];
     } catch (error) {
@@ -99,8 +99,13 @@ class FaceEmotionAPI {
    */
   async getModelInfo(): Promise<ModelInfo> {
     try {
-      const response = await fetch(`${this.baseURL}/model-info`);
-      return await response.json();
+      const response = await fetch(`${this.baseURL}/api/model-info`);
+      const result = await response.json();
+      // Handle gateway response format
+      if (result.result) {
+        return result.result;
+      }
+      return result;
     } catch (error) {
       console.error('Failed to fetch model info:', error);
       throw error;
@@ -114,9 +119,9 @@ class FaceEmotionAPI {
   async analyzeFace(imageBlob: Blob): Promise<FaceAnalysisResult> {
     try {
       const formData = new FormData();
-      formData.append('image', imageBlob, 'face.jpg');
+      formData.append('file', imageBlob, 'face.jpg');
 
-      const response = await fetch(`${this.baseURL}/analyze-face`, {
+      const response = await fetch(`${this.baseURL}/api/face`, {
         method: 'POST',
         body: formData,
       });
@@ -126,7 +131,14 @@ class FaceEmotionAPI {
         throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      // Handle gateway response format
+      if (result.result && result.result.status === 'success') {
+        return result.result.data;
+      } else if (result.result && result.result.status === 'error') {
+        throw new Error(result.result.error);
+      }
+      return result;
     } catch (error) {
       console.error('Face analysis failed:', error);
       return {
@@ -163,10 +175,10 @@ class FaceEmotionAPI {
 
       const formData = new FormData();
       imageBlobs.forEach((blob, index) => {
-        formData.append('images', blob, `face_${index}.jpg`);
+        formData.append('files', blob, `face_${index}.jpg`);
       });
 
-      const response = await fetch(`${this.baseURL}/analyze-batch`, {
+      const response = await fetch(`${this.baseURL}/api/face/batch`, {
         method: 'POST',
         body: formData,
       });
@@ -176,7 +188,12 @@ class FaceEmotionAPI {
         throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      // Handle gateway response format
+      if (result.result) {
+        return result.result;
+      }
+      return result;
     } catch (error) {
       console.error('Batch analysis failed:', error);
       return {

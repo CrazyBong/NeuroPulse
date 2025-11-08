@@ -1,25 +1,127 @@
 import { motion } from 'motion/react';
 import { StressGauge } from './StressGauge';
 import { EmotionChart } from './EmotionChart';
-import { TrendingUp, TrendingDown, Brain, Heart, AlertCircle, Lightbulb, ExternalLink, Activity } from 'lucide-react';
+import { TrendingUp, TrendingDown, Brain, Heart, AlertCircle, Lightbulb, ExternalLink, Activity, Sparkles } from 'lucide-react';
 import type { FusionResponse } from '../services/api';
-import { useMemo, useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { generateMentalHealthTips, type MentalHealthTipsResponse } from '../services/openai';
 
 interface DashboardProps {
-  data: FusionResponse;
+  result: FusionResponse;
 }
 
-export function Dashboard({ data }: DashboardProps) {
+export function Dashboard({ result }: DashboardProps) {
+  // ✅ Prevent undefined properties from crashing UI
+  const safeData = {
+    success: result?.success ?? false,
+    combined_emotion: result?.combined_emotion ?? 'neutral',
+    confidence: result?.confidence ?? 0,
+    predictions: result?.predictions ?? [],
+    sources: {
+      text: result?.sources?.text ?? null,
+      face: result?.sources?.face ?? null,
+      audio: result?.sources?.audio ?? null,
+    },
+    weights: {
+      text: result?.weights?.text ?? 0,
+      face: result?.weights?.face ?? 0,
+      audio: result?.weights?.audio ?? 0,
+    },
+    stress: result?.stress ?? 0,
+    llm_summary: result?.llm_summary ?? '',
+    error: result?.error ?? undefined,
+  };
+
+  const formattedPredictions = useMemo(() => {
+    if (!safeData.predictions || typeof safeData.predictions !== "object") return [];
+    if (Array.isArray(safeData.predictions)) return safeData.predictions;
+
+    return Object.entries(safeData.predictions).map(([label, score]) => ({
+      label,
+      score: Number(score)
+    }));
+  }, [safeData.predictions]);
+
+  const negativeEmotions = ["sadness", "fear", "anger", "disgust"];
+
+  const stressScore = useMemo(() => {
+    // Use backend-calculated stress if available, otherwise calculate locally
+    if (typeof safeData.stress === 'number' && safeData.stress >= 0) {
+      return safeData.stress;
+    }
+    
+    // Fallback to local calculation
+    if (!formattedPredictions.length) return 0;
+
+    let sum = 0;
+    for (const emo of formattedPredictions) {
+      const label = emo.label.toLowerCase();
+      if (negativeEmotions.includes(label)) {
+        sum += emo.score;
+      }
+    }
+
+    // Convert to 0–1 range for StressGauge
+    return Math.min(1, Math.max(0, sum));
+  }, [formattedPredictions, safeData.stress]);
+
+  const getTextStress = useMemo(() => {
+    if (!safeData.sources.text?.predictions) return 0;
+    
+    let sum = 0;
+    const negativeEmotions = ["sadness", "fear", "anger", "disgust"];
+    
+    for (const pred of safeData.sources.text.predictions) {
+      const label = pred.label.toLowerCase();
+      if (negativeEmotions.includes(label)) {
+        sum += pred.score;
+      }
+    }
+    
+    return Math.min(1, Math.max(0, sum));
+  }, [safeData.sources.text?.predictions]);
+  
+  const getFaceStress = useMemo(() => {
+    if (!safeData.sources.face?.predictions) return 0;
+    
+    let sum = 0;
+    const negativeEmotions = ["sadness", "fear", "anger", "disgust"];
+    
+    for (const pred of safeData.sources.face.predictions) {
+      const label = pred.label.toLowerCase();
+      if (negativeEmotions.includes(label)) {
+        sum += pred.score;
+      }
+    }
+    
+    return Math.min(1, Math.max(0, sum));
+  }, [safeData.sources.face?.predictions]);
+  
+  const getAudioStress = useMemo(() => {
+    if (!safeData.sources.audio?.predictions) return 0;
+    
+    let sum = 0;
+    const negativeEmotions = ["sadness", "fear", "anger", "disgust"];
+    
+    for (const pred of safeData.sources.audio.predictions) {
+      const label = pred.label.toLowerCase();
+      if (negativeEmotions.includes(label)) {
+        sum += pred.score;
+      }
+    }
+    
+    return Math.min(1, Math.max(0, sum));
+  }, [safeData.sources.audio?.predictions]);
+
   const [mentalHealthTips, setMentalHealthTips] = useState<MentalHealthTipsResponse | null>(null);
   const [loadingTips, setLoadingTips] = useState(true);
 
   const stressLevel = useMemo(() => {
-    const score = data.combined_stress_score;
+    const score = stressScore;
     if (score < 0.3) return { label: 'Low', color: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/20', icon: TrendingDown };
     if (score < 0.6) return { label: 'Moderate', color: 'text-amber-400', bgColor: 'bg-amber-500/10', borderColor: 'border-amber-500/20', icon: Activity };
     return { label: 'High', color: 'text-rose-400', bgColor: 'bg-rose-500/10', borderColor: 'border-rose-500/20', icon: TrendingUp };
-  }, [data.combined_stress_score]);
+  }, [stressScore]);
 
   const StressIcon = stressLevel.icon;
 
@@ -29,13 +131,13 @@ export function Dashboard({ data }: DashboardProps) {
       setLoadingTips(true);
       try {
         const tipsResponse = await generateMentalHealthTips({
-          stressScore: data.combined_stress_score,
-          primaryEmotion: data.primary_emotion,
-          emotionBreakdown: data.emotions,
-          hasTextAnalysis: data.breakdown.text_weight > 0,
-          hasFaceAnalysis: data.breakdown.face_weight > 0,
-          textStress: data.breakdown.text_stress,
-          faceStress: data.breakdown.face_stress,
+          stressScore: stressScore,
+          primaryEmotion: safeData.combined_emotion,
+          emotionBreakdown: safeData.predictions,
+          hasTextAnalysis: safeData.weights.text > 0,
+          hasFaceAnalysis: safeData.weights.face > 0,
+          textStress: getTextStress,
+          faceStress: getFaceStress,
         });
         setMentalHealthTips(tipsResponse);
       } catch (error) {
@@ -46,7 +148,7 @@ export function Dashboard({ data }: DashboardProps) {
     };
 
     fetchTips();
-  }, [data]);
+  }, [safeData, stressScore]);
 
   return (
     <motion.div
@@ -73,12 +175,12 @@ export function Dashboard({ data }: DashboardProps) {
       >
         <p className="text-slate-400 text-sm mb-3">Primary Emotion</p>
         <h3 className="text-white capitalize text-4xl mb-3">
-          {data.primary_emotion}
+          {safeData.combined_emotion}
         </h3>
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-full">
           <div className="w-2 h-2 bg-purple-400 rounded-full" />
           <span className="text-slate-300 text-sm">
-            {(data.confidence * 100).toFixed(0)}% confidence
+            {(safeData.confidence * 100).toFixed(0)}% confidence
           </span>
         </div>
       </motion.div>
@@ -98,7 +200,7 @@ export function Dashboard({ data }: DashboardProps) {
           </div>
           
           <div className="flex flex-col items-center py-4">
-            <StressGauge value={data.combined_stress_score} />
+            <StressGauge value={stressScore} />
             
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -124,12 +226,12 @@ export function Dashboard({ data }: DashboardProps) {
             <h3 className="text-white">Emotions Detected</h3>
           </div>
           
-          <EmotionChart emotions={data.emotions} />
+          <EmotionChart emotions={formattedPredictions} />
         </motion.div>
       </div>
 
-      {/* Analysis Breakdown - Only show if both modalities used */}
-      {data.breakdown.face_weight > 0 && data.breakdown.text_weight > 0 && (
+      {/* Analysis Breakdown - Show if at least one modality exists */}
+      {(safeData.weights.text > 0 || safeData.weights.face > 0 || safeData.weights.audio > 0) && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -137,36 +239,57 @@ export function Dashboard({ data }: DashboardProps) {
           className="bg-slate-900/50 border border-slate-700/50 rounded-2xl p-6"
         >
           <h3 className="text-white mb-4">Analysis Sources</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-400">Text Analysis</span>
-                <span className="text-slate-300">{(data.breakdown.text_weight * 100).toFixed(0)}%</span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {safeData.weights.text > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">Text Analysis</span>
+                  <span className="text-slate-300">{(safeData.weights.text * 100).toFixed(0)}%</span>
+                </div>
+                <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${getTextStress * 100}%` }}
+                    transition={{ delay: 0.6, duration: 0.8 }}
+                    className="h-full bg-blue-500/80"
+                  />
+                </div>
               </div>
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${data.breakdown.text_stress * 100}%` }}
-                  transition={{ delay: 0.6, duration: 0.8 }}
-                  className="h-full bg-blue-500/80"
-                />
-              </div>
-            </div>
+            )}
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-400">Facial Analysis</span>
-                <span className="text-slate-300">{(data.breakdown.face_weight * 100).toFixed(0)}%</span>
+            {safeData.weights.face > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">Facial Analysis</span>
+                  <span className="text-slate-300">{(safeData.weights.face * 100).toFixed(0)}%</span>
+                </div>
+                <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${getFaceStress * 100}%` }}
+                    transition={{ delay: 0.6, duration: 0.8 }}
+                    className="h-full bg-purple-500/80"
+                  />
+                </div>
               </div>
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${data.breakdown.face_stress * 100}%` }}
-                  transition={{ delay: 0.6, duration: 0.8 }}
-                  className="h-full bg-purple-500/80"
-                />
+            )}
+
+            {safeData.weights.audio > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">Audio Analysis</span>
+                  <span className="text-slate-300">{(safeData.weights.audio * 100).toFixed(0)}%</span>
+                </div>
+                <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${getAudioStress * 100}%` }}
+                    transition={{ delay: 0.6, duration: 0.8 }}
+                    className="h-full bg-green-500/80"
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </motion.div>
       )}
@@ -247,6 +370,24 @@ export function Dashboard({ data }: DashboardProps) {
           <p className="text-slate-400 text-center py-8">Unable to generate recommendations at this time.</p>
         )}
       </motion.div>
+
+      {/* AI Insights */}
+      {safeData.llm_summary && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="bg-slate-900/50 border border-slate-700/50 rounded-2xl p-6"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="w-5 h-5 text-slate-400" />
+            <h3 className="text-white">AI Insights</h3>
+          </div>
+          <div className="prose prose-invert max-w-none">
+            <p className="text-slate-300 whitespace-pre-wrap">{safeData.llm_summary}</p>
+          </div>
+        </motion.div>
+      )}
     </motion.div>
   );
 }

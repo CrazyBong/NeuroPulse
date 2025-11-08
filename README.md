@@ -107,6 +107,23 @@ The application will be available at `http://localhost:3000`
 - `POST /api/analyze-face` - Analyze face emotion
 - `POST /api/analyze-batch` - Batch face analysis
 
+## Unified Response Format
+
+All backend services return a consistent JSON response format:
+
+```json
+{
+  "success": true,
+  "predictions": [
+    {"label": "emotion_name", "score": 0.85}
+  ],
+  "top_emotion": "emotion_name",
+  "confidence": 0.85
+}
+```
+
+This unified format makes it easy for the frontend to handle responses from all services consistently.
+
 ## Testing
 
 Run backend tests:

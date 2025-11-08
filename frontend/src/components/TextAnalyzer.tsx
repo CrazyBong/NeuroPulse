@@ -22,9 +22,16 @@ export function TextAnalyzer({ onAnalysisComplete }: TextAnalyzerProps) {
     setIsAnalyzing(true);
     try {
       const result = await analyzeText(text);
-      setShapData(result.shap_explanation);
-      setShowShap(true);
+
+      // ✅ SAFETY: If backend does NOT send shap data, default to empty array
+      const shap = Array.isArray(result.shap_explanation)
+        ? result.shap_explanation
+        : [];
+
+      setShapData(shap);
+      setShowShap(shap.length > 0); // ✅ Only show if actual data exists
       onAnalysisComplete(result);
+
     } catch (error) {
       console.error('Analysis failed:', error);
     } finally {

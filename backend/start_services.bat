@@ -15,6 +15,11 @@ timeout /t 5
 echo Starting Face Emotion Analysis (Port 5002)...
 start "Face Backend" /D "c:\Users\Lenovo\NeuroPulse\backend" cmd /k "python face_model.py"
 
+timeout /t 5
+
+echo Starting API Gateway (Port 8000)...
+start "API Gateway" /D "c:\Users\Lenovo\NeuroPulse\backend\gateway" cmd /k "python app.py"
+
 echo All services started. Check the individual command windows for status.
 echo Press any key to close this window...
 pause >nul

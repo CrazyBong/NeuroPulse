@@ -31,7 +31,7 @@ export function LiveEmotionAnalysis({ onComplete, onError, initialStream }: Live
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const analyzeIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const analyzeIntervalRef = useRef<number | null>(null);
   const sessionStartRef = useRef<number>(Date.now());
 
   useEffect(() => {
@@ -143,23 +143,27 @@ export function LiveEmotionAnalysis({ onComplete, onError, initialStream }: Live
         const result = await analyzeFace(blob);
         setCurrentEmotion(result);
         
+        // Extract emotion and confidence from the result (handle both direct and gateway formats)
+        const topEmotion = result?.top_emotion || 'neutral';
+        const confidence = result?.confidence || 0;
+        
         // Update emotion history
         setEmotionHistory(prev => {
-          const existing = prev.find(e => e.label === result.emotion);
+          const existing = prev.find(e => e.label === topEmotion);
           if (existing) {
             return prev.map(e => 
-              e.label === result.emotion ? { ...e, count: e.count + 1 } : e
+              e.label === topEmotion ? { ...e, count: e.count + 1 } : e
             );
           }
-          return [...prev, { label: result.emotion, count: 1 }];
+          return [...prev, { label: topEmotion, count: 1 }];
         });
 
         // Generate AI feedback
         const aiComment = generateAIComment(result);
         setLiveFeedback(prev => [
           {
-            emotion: result.emotion,
-            confidence: result.confidence,
+            emotion: topEmotion,
+            confidence: confidence,
             aiComment,
             timestamp: Date.now()
           },
@@ -171,19 +175,23 @@ export function LiveEmotionAnalysis({ onComplete, onError, initialStream }: Live
     }
   };
 
-  const generateAIComment = (emotion: FaceEmotionResponse): string => {
+  const generateAIComment = (emotion: any): string => {
+    // Extract emotion label safely (handle both direct and gateway formats)
+    const emotionLabel = emotion?.top_emotion || 'neutral';
+    const confidence = emotion?.confidence || 0;
+    
     const comments: Record<string, string[]> = {
-      joy: [
+      happy: [
         "Your smile is radiating positive energy! Keep up this wonderful mood.",
         "Happiness detected! This emotional state is great for productivity and creativity.",
         "You're in a great mood! Consider sharing this positive energy with others."
       ],
-      sadness: [
+      sad: [
         "I notice you might be feeling down. Remember, it's okay to take a moment for yourself.",
         "Your expression suggests some sadness. Consider taking deep breaths or reaching out to someone.",
         "Feeling low is natural. Perhaps a short break or a walk could help lift your spirits."
       ],
-      anger: [
+      angry: [
         "I detect some tension. Try the 4-7-8 breathing technique to help calm your nervous system.",
         "Your expression shows frustration. Taking a brief pause before reacting can be helpful.",
         "High stress detected. Consider stepping away momentarily to regain composure."
@@ -202,10 +210,36 @@ export function LiveEmotionAnalysis({ onComplete, onError, initialStream }: Live
         "You appear calm and centered. This is a great state for focused work.",
         "Balanced emotional state detected. Maintain this equilibrium.",
         "Your expression is neutral and composed - a sign of good emotional regulation."
+      ],
+      disgust: [
+        "I notice a reaction of disgust. Take a moment to identify what might be causing this feeling.",
+        "Something seems to be bothering you. Consider what might be triggering this response.",
+        "Disgust detected. Try to focus on more positive stimuli around you."
+      ],
+      joy: [
+        "Your smile is radiating positive energy! Keep up this wonderful mood.",
+        "Happiness detected! This emotional state is great for productivity and creativity.",
+        "You're in a great mood! Consider sharing this positive energy with others."
+      ],
+      sadness: [
+        "I notice you might be feeling down. Remember, it's okay to take a moment for yourself.",
+        "Your expression suggests some sadness. Consider taking deep breaths or reaching out to someone.",
+        "Feeling low is natural. Perhaps a short break or a walk could help lift your spirits."
+      ],
+      anger: [
+        "I detect some tension. Try the 4-7-8 breathing technique to help calm your nervous system.",
+        "Your expression shows frustration. Taking a brief pause before reacting can be helpful.",
+        "High stress detected. Consider stepping away momentarily to regain composure."
       ]
     };
 
-    const emotionComments = comments[emotion.emotion.toLowerCase()] || comments.neutral;
+    // Use the emotion label safely
+    const emotionKey = emotionLabel?.toLowerCase?.() ?? 'neutral';
+    const emotionComments = comments[emotionKey] || comments.neutral || [
+      "I'm observing your emotional state and providing insights to help you understand your feelings better.",
+      "Your emotional expression is being analyzed to provide personalized feedback.",
+      "Take a moment to reflect on how you're feeling right now."
+    ];
     return emotionComments[Math.floor(Math.random() * emotionComments.length)];
   };
 
@@ -216,9 +250,10 @@ export function LiveEmotionAnalysis({ onComplete, onError, initialStream }: Live
     } else {
       // If no emotion detected yet, create a default one
       onComplete({
-        emotion: 'neutral',
-        confidence: 0.5,
-        detailed_emotions: { neutral: 0.5 }
+        success: true,
+        predictions: [{ label: 'neutral', score: 0.5 }],
+        top_emotion: 'neutral',
+        confidence: 0.5
       });
     }
   };
@@ -376,12 +411,12 @@ export function LiveEmotionAnalysis({ onComplete, onError, initialStream }: Live
                       <div>
                         <p className="text-slate-400 text-sm mb-1">Current Emotion</p>
                         <motion.h3
-                          key={currentEmotion.emotion}
+                          key={currentEmotion.top_emotion}
                           initial={{ scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
                           className="text-white text-2xl capitalize"
                         >
-                          {currentEmotion.emotion}
+                          {currentEmotion.top_emotion}
                         </motion.h3>
                       </div>
                       <div className="text-right">

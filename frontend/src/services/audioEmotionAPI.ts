@@ -1,7 +1,7 @@
 /**
- * Text Emotion Recognition API Service
- * Connects to Flask backend for text emotion analysis
- * Backend: http://127.0.0.1:5001
+ * Audio Emotion Recognition API Service
+ * Connects to Flask backend for audio emotion analysis
+ * Backend: http://127.0.0.1:5000
  */
 
 const BACKEND_URL = 'http://127.0.0.1:8000';
@@ -12,18 +12,18 @@ export interface EmotionPrediction {
   score: number;
 }
 
-export interface TextAnalysisResult {
+export interface AudioAnalysisResult {
   success: boolean;
   predictions: EmotionPrediction[];
   top_emotion: string;
   confidence: number;
-  text_length?: number;
+  duration?: number;
   error?: string;
 }
 
 export interface BatchAnalysisResult {
   success: boolean;
-  results: Array<TextAnalysisResult & { index: number }>;
+  results: Array<AudioAnalysisResult & { index: number }>;
   total?: number;
   error?: string;
 }
@@ -36,18 +36,8 @@ export interface BackendHealthResponse {
   type: string;
 }
 
-export interface ModelInfo {
-  success: boolean;
-  model_name: string;
-  model_type: string;
-  emotions: string[];
-  max_length: number;
-  language: string;
-  description: string;
-}
-
 // Main API Class
-class TextEmotionAPI {
+class AudioEmotionAPI {
   private baseURL: string;
 
   constructor(baseURL: string = BACKEND_URL) {
@@ -75,7 +65,7 @@ class TextEmotionAPI {
         model: '',
         emotions: [],
         timestamp: new Date().toISOString(),
-        type: 'text-emotion-analysis',
+        type: 'audio-emotion-analysis',
       };
     }
   }
@@ -91,55 +81,76 @@ class TextEmotionAPI {
     } catch (error) {
       console.error('Failed to fetch emotions:', error);
       // Fallback emotions
-      return ['anger', 'disgust', 'fear', 'joy', 'neutral', 'sadness', 'surprise'];
+      return ['angry', 'calm', 'disgust', 'fearful', 'happy', 'neutral', 'sad', 'surprised'];
     }
   }
 
   /**
-   * Get detailed model information
+   * Get available audio devices
    */
-  async getModelInfo(): Promise<ModelInfo> {
+  async getAudioDevices(): Promise<{ success: boolean; devices: any[] }> {
     try {
-      const response = await fetch(`${this.baseURL}/api/model-info`);
-      return await response.json();
+      const response = await fetch(`${this.baseURL}/api/audio/devices`);
+      const result = await response.json();
+      // Handle gateway response format
+      if (result.result) {
+        return result.result;
+      }
+      return result;
     } catch (error) {
-      console.error('Failed to fetch model info:', error);
-      throw error;
+      console.error('Failed to fetch audio devices:', error);
+      return { success: false, devices: [] };
     }
   }
 
   /**
-   * Analyze text for emotion
-   * @param text - Text to analyze (max 5000 characters)
+   * Record audio and predict emotion
    */
-  async analyzeText(text: string): Promise<TextAnalysisResult> {
+  async recordAndPredict(): Promise<AudioAnalysisResult> {
     try {
-      if (!text || text.trim().length === 0) {
-        return {
-          success: false,
-          predictions: [],
-          top_emotion: 'neutral',
-          confidence: 0,
-          error: 'Text cannot be empty',
-        };
-      }
-
-      if (text.length > 5000) {
-        return {
-          success: false,
-          predictions: [],
-          top_emotion: 'neutral',
-          confidence: 0,
-          error: 'Text too long (max 5000 characters)',
-        };
-      }
-
-      const response = await fetch(`${this.baseURL}/api/text`, {
+      const response = await fetch(`${this.baseURL}/api/audio`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ action: 'record' }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      // Handle gateway response format
+      if (result.result) {
+        return result.result;
+      }
+      return result;
+    } catch (error) {
+      console.error('Audio recording and prediction failed:', error);
+      return {
+        success: false,
+        predictions: [],
+        top_emotion: 'neutral',
+        confidence: 0,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  /**
+   * Upload audio file and predict emotion
+   * @param audioBlob - Audio file blob to analyze
+   */
+  async uploadAndPredict(audioBlob: Blob): Promise<AudioAnalysisResult> {
+    try {
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'recording.wav');
+
+      const response = await fetch(`${this.baseURL}/api/audio`, {
+        method: 'POST',
+        body: formData,
       });
 
       if (!response.ok) {
@@ -156,7 +167,7 @@ class TextEmotionAPI {
       }
       return result;
     } catch (error) {
-      console.error('Text analysis failed:', error);
+      console.error('Audio upload and prediction failed:', error);
       return {
         success: false,
         predictions: [],
@@ -168,33 +179,17 @@ class TextEmotionAPI {
   }
 
   /**
-   * Analyze multiple texts in batch
-   * @param texts - Array of texts to analyze (max 50)
+   * Predict emotion from raw audio data
+   * @param audioData - Raw audio data
    */
-  async analyzeBatch(texts: string[]): Promise<BatchAnalysisResult> {
+  async predictFromData(audioData: ArrayBuffer): Promise<AudioAnalysisResult> {
     try {
-      if (!texts || texts.length === 0) {
-        return {
-          success: false,
-          results: [],
-          error: 'texts array cannot be empty',
-        };
-      }
-
-      if (texts.length > 50) {
-        return {
-          success: false,
-          results: [],
-          error: 'Maximum 50 texts per batch',
-        };
-      }
-
-      const response = await fetch(`${this.baseURL}/api/text/batch`, {
+      const response = await fetch(`${this.baseURL}/api/audio/data`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/octet-stream',
         },
-        body: JSON.stringify({ texts }),
+        body: audioData,
       });
 
       if (!response.ok) {
@@ -209,11 +204,13 @@ class TextEmotionAPI {
       }
       return result;
     } catch (error) {
-      console.error('Batch analysis failed:', error);
+      console.error('Audio data prediction failed:', error);
       return {
         success: false,
-        results: [],
-        error: error instanceof Error ? error.message : 'Batch analysis failed',
+        predictions: [],
+        top_emotion: 'neutral',
+        confidence: 0,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
       };
     }
   }
@@ -231,13 +228,14 @@ class TextEmotionAPI {
    */
   getEmotionColor(emotion: string): string {
     const colors: Record<string, string> = {
-      anger: '#ef4444',      // red
+      angry: '#ef4444',      // red
+      calm: '#8b5cf6',       // purple
       disgust: '#f97316',    // orange
-      fear: '#8b5cf6',       // purple
-      joy: '#fbbf24',        // yellow
+      fearful: '#8b5cf6',    // purple
+      happy: '#fbbf24',      // yellow
       neutral: '#6b7280',    // gray
-      sadness: '#3b82f6',    // blue
-      surprise: '#ec4899',   // pink
+      sad: '#3b82f6',        // blue
+      surprised: '#ec4899',  // pink
     };
     return colors[emotion.toLowerCase()] || '#6b7280';
   }
@@ -247,20 +245,21 @@ class TextEmotionAPI {
    */
   getEmotionEmoji(emotion: string): string {
     const emojis: Record<string, string> = {
-      anger: '😠',
+      angry: '😠',
+      calm: '😌',
       disgust: '🤢',
-      fear: '😨',
-      joy: '😄',
+      fearful: '😨',
+      happy: '😄',
       neutral: '😐',
-      sadness: '😢',
-      surprise: '😲',
+      sad: '😢',
+      surprised: '😲',
     };
     return emojis[emotion.toLowerCase()] || '😐';
   }
 }
 
 // Export singleton instance
-export const textEmotionAPI = new TextEmotionAPI();
+export const audioEmotionAPI = new AudioEmotionAPI();
 
 // Also export the class for custom instances
-export default TextEmotionAPI;
+export default AudioEmotionAPI;
